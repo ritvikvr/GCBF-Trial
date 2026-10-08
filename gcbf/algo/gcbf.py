@@ -290,11 +290,49 @@ class GCBF(Algorithm):
             h_next = self.cbf(data_next)
             h_dot = (h_next - h) / self._env.dt
             max_val_h_dot = torch.relu((-h_dot - self.params['alpha'] * h))
-            loss_h_dot = torch.mean(max_val_h_dot)
+            
+            # Analytical CBF
+            pos = data.states[data.agent_mask, :3]
+            v = data.states[data.agent_mask, 3:6] if data.states.shape[1] >= 6 else torch.zeros_like(pos)
+            pos_next = data_next.states[data_next.agent_mask, :3]
+            
+            dist_mat = torch.cdist(pos, pos) + torch.eye(pos.size(0), device=pos.device) * 1000
+            min_dist = torch.min(dist_mat, dim=1)[0]
+            dist_mat_next = torch.cdist(pos_next, pos_next) + torch.eye(pos_next.size(0), device=pos_next.device) * 1000
+            min_dist_next = torch.min(dist_mat_next, dim=1)[0]
+            
+            h_ana = min_dist - 0.20
+            h_ana_next = min_dist_next - 0.20
+            h_ana_dot = (h_ana_next - h_ana) / self._env.dt
+            max_val_h_ana = torch.relu((-h_ana_dot - self.params['alpha'] * h_ana)).unsqueeze(1)
+            
+            obs_pos = self._env._obs[:, :3] if hasattr(self._env, '_obs') else torch.empty(0, 3, device=pos.device)
+            if obs_pos.shape[0] > 0:
+                obs_dist = torch.cdist(pos, obs_pos)
+                min_obs_dist = torch.min(obs_dist, dim=1)[0]
+                obs_dist_next = torch.cdist(pos_next, obs_pos)
+                min_obs_dist_next = torch.min(obs_dist_next, dim=1)[0]
+                h_obs = min_obs_dist - 0.20
+                h_obs_next = min_obs_dist_next - 0.20
+                h_obs_dot = (h_obs_next - h_obs) / self._env.dt
+                max_val_h_obs = torch.relu((-h_obs_dot - self.params['alpha'] * h_obs)).unsqueeze(1)
+            else:
+                max_val_h_obs = torch.zeros_like(max_val_h_ana)
+                
+            loss_h_dot = torch.mean(max_val_h_dot) + torch.mean(max_val_h_ana) * 20.0 + torch.mean(max_val_h_obs) * 20.0
+            
             if loss_h_dot <= 0 or i_iter > max_iter:
+                if loss_h_dot > 0:
+                    brake_mask = ((max_val_h_ana > 0) | (max_val_h_obs > 0) | (max_val_h_dot > 0)).squeeze(1)
+                    if brake_mask.any():
+                        action[brake_mask] = -v[brake_mask] / self._env.dt
                 break
             else:
-                val_agent = torch.nonzero(max_val_h_dot)[:, 0]
+                val_agent = torch.unique(torch.cat([
+                    torch.nonzero(max_val_h_dot)[:, 0],
+                    torch.nonzero(max_val_h_ana)[:, 0],
+                    torch.nonzero(max_val_h_obs)[:, 0]
+                ]))
                 for i in val_agent:
                     optim[i].zero_grad(set_to_none=True)
                 loss_h_dot.backward()

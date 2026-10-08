@@ -173,7 +173,6 @@ def main():
     ax.set_ylim(env._xyz_min[1], env._xyz_max[1])
     ax.set_zlim(env._xyz_min[2] if env._xyz_min.shape[0] > 2 else 0.0, env._xyz_max[2] if env._xyz_max.shape[0] > 2 else 2.0)
     ax.set_title("GCBF SimpleDrone 3D Visualization", fontsize=14, weight='bold')
-    ax.view_init(elev=90, azim=-90)  # Set top view
     ax.legend(loc='upper right')
     
     # Status texts (2D on top of 3D plot)

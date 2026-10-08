@@ -62,17 +62,14 @@ class SimpleDrone(MultiAgentEnv):
 
     @property
     def max_episode_steps(self) -> int:
-        if self._mode == 'train':
-            return 500
-        else:
-            return 2000
+        return 1500
 
     @property
     def default_params(self) -> dict:
         return {
-            'area_size': 2.,
+            'area_size': 8.,
             'speed_limit': 0.6,  # maximum speed
-            'drone_radius': 0.05,
+            'drone_radius': 0.10,
             'comm_radius': 0.5,
             'dist2goal': 0.02,
             'obs_point_r': 0.05,
@@ -130,7 +127,7 @@ class SimpleDrone(MultiAgentEnv):
             # Use _num_obs instead of num_agents for random obstacles
             obs_pos = torch.zeros(self._num_obs, 3, device=self.device)
             while i < self._num_obs:
-                obs_pos[i] = torch.rand(3, device=self.device) * self._params['area_size']
+                obs_pos[i] = torch.rand(3, device=self.device) * 2.0
                 i += 1
                 
             self._obs = torch.zeros(obs_pos.shape[0], self.state_dim, device=self.device)

@@ -127,10 +127,12 @@ class SimpleDrone(MultiAgentEnv):
         if self._mode == 'train' or self._mode == 'test':
             # generate obstacles
             i = 0
-            obs_pos = torch.zeros(self.num_agents, 3, device=self.device)
-            while i < self.num_agents:
+            # Use _num_obs instead of num_agents for random obstacles
+            obs_pos = torch.zeros(self._num_obs, 3, device=self.device)
+            while i < self._num_obs:
                 obs_pos[i] = torch.rand(3, device=self.device) * self._params['area_size']
                 i += 1
+                
             self._obs = torch.zeros(obs_pos.shape[0], self.state_dim, device=self.device)
             self._obs[:, :3] = obs_pos
 
@@ -165,6 +167,32 @@ class SimpleDrone(MultiAgentEnv):
                     continue
                 goals[i, :3] = candidate
                 i += 1
+
+            # Add a small 3D cylindrical object between specific agents and their goals
+            for agent_idx in [4, 7]:
+                if self.num_agents > agent_idx:
+                    cylinder_center = (states[agent_idx, :3] + goals[agent_idx, :3]) / 2.0
+                    cylinder_radius = 0.1
+                    cylinder_height = 0.5
+                    resolution = 0.05
+                    
+                    num_z = max(int(cylinder_height / resolution), 1)
+                    num_theta = max(int(2 * np.pi * cylinder_radius / resolution), 1)
+                    
+                    cyl_points = []
+                    z_start = cylinder_center[2] - cylinder_height / 2.0
+                    for z in np.linspace(z_start.item(), (z_start + cylinder_height).item(), num_z):
+                        for theta in np.linspace(0, 2 * np.pi, num_theta, endpoint=False):
+                            x = cylinder_center[0] + cylinder_radius * np.cos(theta)
+                            y = cylinder_center[1] + cylinder_radius * np.sin(theta)
+                            cyl_points.append(torch.tensor([x, y, z], device=self.device))
+                            
+                    if cyl_points:
+                        cyl_pos = torch.stack(cyl_points, dim=0)
+                        obs_pos = torch.cat([obs_pos, cyl_pos], dim=0)
+                    
+            self._obs = torch.zeros(obs_pos.shape[0], self.state_dim, device=self.device)
+            self._obs[:, :3] = obs_pos
 
             # build graph
             data = Data(
